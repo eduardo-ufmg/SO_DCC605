@@ -52,37 +52,59 @@ uma trap é uma interrupção causada por um sinal emitido pelo próprio process
 1. [Silberschatz 3.8] Qual a diferença entre escalonamento de curto prazo,
    médio prazo e longo prazo?
 
+longo: balancear a carga entre os processadores;
+médio: reduzir transferências de dados de processos entre memória e disco;
+curto: aumentar a responsividade dos processos ativos.
+
 1. Como é feita a troca de contexto entre 2 processos?
+
+o estado do processo A é armazenado e o estado do processo B transferido ao processador.
 
 1. Considera uma máquina sem múltiplos processadores (cores). Aqui, existem
    vantagens em usar threads?
 
+caso os processos usem e/s, sim.
+
 1. Em quais momentos um processo pode passar do estado RUNNING (Em Execução)
    para o estado WAITING (Em Espera)?
+
+quando este acessa e/s.
 
 1. O Linux mantém um um novo estado de processos indicando que o mesmo não pode
    ser interrompido. Qual a vantagem deste novo estado?
 
+este estado garante que o processo seja concluído tão rápido quanto permitido por suas operações.
+
 1. Você consegue pensar em algum motivo pelo qual executamos um `fork` sem
    seguir um `exec`?
+
+pode ser conveniente quando a tarefa executada pelo novo processo é simples o suficiente para não demandar a execução de outro processo.
 
 1. [Silberschatz 4.8 - Alterada] Pensando no estado de um processo, assum que
    um processo qualquer cria uma thread. Quais informações são compartilhadas
    com a threads? Quais não são?
 
+são compartilhados o id do processo, seu espaço de endereçamento e posse de recursos do sistema.
+
 1. Qual a diferença entre paralelismo de dados e de processos?
+
+não são compartilhados o conteúdo dos registradores, região de stack e id de thread.
 
 ## Escalonamento
 
 1. [Silberschatz 6.2] Qual a diferença entre escalonamento com interrupções e
    sem interrupções?
 
+o escolamento com interrupções pode alterar o estado de um programa de **executando** para **pronto**. no escalonamento sem interrupções, por outro lado, um processo só pode passar de **executando** para **concluído** ou **esperando**.
+
 1. [Silberschatz 6.10 - Alterado] Como vimos em aula, o tempo de execução (CPU)
    e o tempo de espera (IO) afetam a prioridade de um processo. Qual a
    importância de separar os 2 tempos?
 
+separar os dois tempos permite otimizar o algoritmo de escalonamento para que cada processo só tenha posse da cpu quando for a utilizar.
+
 1. Explique as métricas de avaliação de algoritmos de escalonamento.
-   * Throughput
+   * Throughput: quantidade 
    * Turnaround time (tempo de término)
    * Tempo de Espera
    * Tempo de Resposta
