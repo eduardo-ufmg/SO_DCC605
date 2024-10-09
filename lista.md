@@ -104,13 +104,15 @@ o escolamento com interrupções pode alterar o estado de um programa de **execu
 separar os dois tempos permite otimizar o algoritmo de escalonamento para que cada processo só tenha posse da cpu quando for a utilizar.
 
 1. Explique as métricas de avaliação de algoritmos de escalonamento.
-   * Throughput: quantidade 
-   * Turnaround time (tempo de término)
-   * Tempo de Espera
-   * Tempo de Resposta
+   * Throughput: quantidade de processos concluídos por unidade de tempo
+   * Turnaround time (tempo de término): tempo médio entre criação e conclusão dos processos
+   * Tempo de Espera: tempo total pelo qual o processo esteve em espera
+   * Tempo de Resposta: tempo entre criação e primeira execução do processo
 
 1. Seguindo na questão anterior, seria possível maximizar todas as métricas
    de uma só vez?
+
+   sim. basta aumentar a velocidade e quantidade de núcleos do processador :)
 
 1. [Silberschatz 6.16] Considere o conjunto de processos a seguir. Na tabela,
    mostramos a duração de pico de CPU de cada processo em milissegundos:
@@ -118,7 +120,7 @@ separar os dois tempos permite otimizar o algoritmo de escalonamento para que ca
    | Processo| Duração do Pico | Prioridade |
    | --------|-----------------|------------|
    | P1      | 2               | 2          |
-   | P1      | 1               | 1          |
+   | P2      | 1               | 1          |
    | P3      | 8               | 4          |
    | P4      | 4               | 2          |
    | P5      | 5               | 3          |
@@ -127,15 +129,24 @@ separar os dois tempos permite otimizar o algoritmo de escalonamento para que ca
    Desenhe gráficos de Gantt ilustrando a execução dos processos quando
    utilizamos: (a) FCFS; (b) SJF; (c) RR com quantum=2;
 
+   a) 0: P1 [00-02(02/02)] P2 [02-03(01/01)] P3 [03-11(08/08)] P4 [11-15(04/04)] P5 [15-20(05/05)]
+   b) 0: P2 [00-01(01/01)] P1 [01-03(02/02)] P4 [03-07(04/04)] P5 [07-12(05/05)] P3 [12-20(08/08)]
+   c) 0: P1 [00-02(02/02)] P2 [02-03(01/01)] P3 [03-05(02/08)] P4 [05-07(02/04)] P5 [07-09(02/05)] P3 [09-11(04/08)] P4 [11-13(04/04)] P5 [13-15(04/05)] P3 [15-17(06/08)] P5 [17-18(05/05)] P3 [18-20(08/08)]
+
 1. Para cada processo. Compute as métricas da questão anterior.
-   * Throughput
-   * Turnaround time (tempo de término)
+                                          a   |   b   |   c  
+   * Throughput                          0.25 |  0.25 |  0.25
+   * Turnaround time (tempo de término)  10.2 |  08.6 |  11.2
    * Tempo de Espera
    * Tempo de Resposta
      
 1. Você foi contratado para desenvolver um algoritmo de escalonamento para um sistema operacional (SO) de uso específico, que será executado em máquinas multiprocessadas. Esse SO será utilizado para operar uma plataforma de busca similar ao Google. Os processos que ele gerenciará estão divididos em três grupos principais: um grupo será responsável por coletar páginas da web, outro será encarregado de servir essas páginas para os clientes via Web, e o último grupo será dedicado ao processamento e indexação das páginas.
 
 Como é possível observar, alguns desses processos apresentam uma maior demanda de I/O, enquanto outros são mais intensivos em uso de CPU. Diante desse cenário, como você estruturaria as filas de prioridade para esses diferentes tipos de processos? Quais algoritmos de escalonamento você utilizaria dentro dessas filas? Além disso, você considera necessário permitir que os processos possam migrar entre diferentes filas ao longo do tempo?
+
+Uma fila para cada grupo;  
+RR, RR e FCFS, respectivamente;  
+Não é necessário migrar os processos entre as filas, já que cada um trata de uma parte especifica da tarefa.
 
 ## Sincronização e Deadlocks
 
