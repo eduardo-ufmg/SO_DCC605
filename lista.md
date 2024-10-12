@@ -152,19 +152,55 @@ Não é necessário migrar os processos entre as filas, já que cada um trata de
 
 1. Qual o menor programa que você consegue escrever que gera um deadlock?
    Pode utilizar pseudo código.
-
+```c
+int main() {
+   while(1);
+   return 0;
+}
+```
 1. Faz sentido ter um programa com várias threads que precisa de sincronização
    constante?
+
+depende do que é "constante". se for sincronizar em todas as instruções, basta uma thread para não fazer sentido. se for sincronizar com alta frequência, pode não ser eficiente, mas é plausível.
 
 1. A chamada `thread_yield` faz com que uma thread libere o uso de CPU para
    outra thread/processo. Em quais situações a mesma é útil? Como ela difere
    de mutexes?
 
+pode ser útil em processos que consumam muito tempo de cpu, mas não sejam prioritarias em uma política que não usa round robin. o processo pode ceder a cpu em alguns pontos de controle. é diferente de mutexes porque cede a cpu imediatamente, enquanto estes controlam o acesso a partes específicas do programa.
+
 1. Como podemos implementar um semáforo contador a partir de um semáforo
    binário?
+```c
+typedef struct {
+    int count;
+    pthread_mutex_t binary_semaphore;
+} counting_semaphore_t;
 
+void counting_semaphore_init(counting_semaphore_t *sem, int initial_count) {
+    sem->count = initial_count;
+    pthread_mutex_init(&sem->binary_semaphore, NULL);
+}
+
+void counting_semaphore_wait(counting_semaphore_t *sem) {
+    pthread_mutex_lock(&sem->binary_semaphore);
+    while (sem->count <= 0) {
+        pthread_mutex_unlock(&sem->binary_semaphore);
+        // Busy wait
+        pthread_mutex_lock(&sem->binary_semaphore);
+    }
+    sem->count--;
+    pthread_mutex_unlock(&sem->binary_semaphore);
+}
+```
 1. Existem três requisitos para o problema da seção crítica. Explique os mesmos
    e motivos pelos quais precisamos dos três.
+
+exclusão mútua: garantir que apenas um processo possa estar na seção crítica de cada vez. é crucial para evitar condições de corrida, onde múltiplos processos acessam e modificam dados compartilhados simultaneamente, o que pode levar a resultados inconsistentes ou corrompidos.
+
+progresso: assegura que, se nenhum processo está na seção crítica e existem processos que desejam entrar, algum desses processos deve ser permitido entrar na seção crítica. garante que o sistema não entre em um estado de inatividade onde processos que precisam acessar a seção crítica ficam indefinidamente esperando, mesmo quando a seção crítica está disponível.
+
+espera limitada: estabelece um limite no número de vezes que outros processos podem entrar na seção crítica depois que um processo expressou o desejo de entrar na seção crítica e antes de ser permitido a entrada. evita a inanição, garantindo que todos os processos eventualmente terão acesso à seção crítica, prevenindo que um processo seja perpetuamente adiado.
 
 1. Message Passing Interface (MPI) é um sistema de troca de mensagens bastante
    utilizado para o desenvolvimento de aplicações de cluster. O mesmo define
@@ -174,9 +210,13 @@ Não é necessário migrar os processos entre as filas, já que cada um trata de
    (ou seja, uma espera ocupada). Quais a vantagens de utilizar o spinlock e
    não outro mecanismo que libera a CPU?
 
+quando a espera é curta, é mais eficiente manter a posse da cpu do que fazer multiplas trocas de contexto
+
 1. Em sala de aula falamos que podemos resolver o problema dos filósofos com
    um garçom. Explique como implementar tal garçom. Quais são as vantagens e
    desvantagens desta solução?
+
+   
 
 ## Memória: Hardware
 
