@@ -56,7 +56,7 @@ struct cmd *parsecmd(char*); // Processar o linha de comando.
 void
 runcmd(struct cmd *cmd)
 {
-  int p[2], r;
+  int p[2];
   struct execcmd *ecmd;
   struct pipecmd *pcmd;
   struct redircmd *rcmd;
@@ -76,7 +76,30 @@ runcmd(struct cmd *cmd)
     /* MARK START task2
      * TAREFA2: Implemente codigo abaixo para executar
      * comandos simples. */
-    fprintf(stderr, "exec nao implementado\n");
+
+    /*
+    fork: cria um processo filho
+          retorna 0 para o processo filho
+          retorna o PID do processo filho para o processo pai
+    */
+    if (fork() == 0) {
+      /*
+      execvp: substitui a imagem do processo atual (filho) por um novo processo,
+                dado pelo nome do arquivo e uma lista de argumentos
+              recebe o nome do arquivo e um vetor de strings com os argumentos
+              retorna -1 se falhar      
+      */
+      if (execvp(ecmd->argv[0], ecmd->argv) < 0) {
+        fprintf(stderr, "execvp falhou\n");
+        exit(-1);
+      }
+    } else {
+      /*
+      wait: coloca o processo pai em espera até a próxima conclusão de um processo filho
+      */
+      wait(NULL);
+    }
+
     /* MARK END task2 */
     break;
 
@@ -86,7 +109,36 @@ runcmd(struct cmd *cmd)
     /* MARK START task3
      * TAREFA3: Implemente codigo abaixo para executar
      * comando com redirecionamento. */
-    fprintf(stderr, "redir nao implementado\n");
+
+    /*
+    open: abre um arquivo
+          recebe o nome do arquivo, o modo de abertura e as permissões
+            S_IRWXU: permissões de leitura, escrita e execução para o dono
+          retorna o descritor de arquivo do arquivo aberto
+          retorna -1 se falhar    
+    */
+    int fd = open(rcmd->file, rcmd->mode, S_IRWXU);
+    if (fd < 0) {
+      fprintf(stderr, "não pode abrir %s\n", rcmd->file);
+      exit(-1);
+    }
+    /*
+    dup2: faz com que rcmd->fd receba os atributos fd e seus acessos
+            e com as mesmas permissões
+          recebe o descritor de arquivo original e o descritor de arquivo destino
+          retorna -1 se falhar
+    */
+    if (dup2(fd, rcmd->fd) < 0) {
+      fprintf(stderr, "dup2 falhou\n");
+      exit(-1);
+    }
+    /*
+    close: fecha o descritor de arquivo
+           recebe o descritor de arquivo
+           não é necessário fechar rcmd->fd, pois o arquivo já foi fechado por fd
+    */
+    close(fd);
+
     /* MARK END task3 */
     runcmd(rcmd->cmd);
     break;
@@ -96,7 +148,90 @@ runcmd(struct cmd *cmd)
     /* MARK START task4
      * TAREFA4: Implemente codigo abaixo para executar
      * comando com pipes. */
-    fprintf(stderr, "pipe nao implementado\n");
+
+    /*
+    pipe: cria um pipe para comunicação entre processos
+          recebe um vetor de inteiros com dois elementos,
+            p[0]: descritor de arquivo para leitura
+            p[1]: descritor de arquivo para escrita
+          retorna -1 se falhar
+    */
+    if (pipe(p) < 0) {
+      fprintf(stderr, "pipe falhou\n");
+      exit(-1);
+    }
+
+    /*
+    fork: cria um processo filho
+          retorna 0 para o processo filho
+          retorna o PID do processo filho para o processo pai
+    
+    */
+    if (fork() == 0) {
+      /*
+      close: cada processo tem sua própria saída padrão (descritor de arquivo 1)
+             libera o descritor da saída padrão do processo filho
+      */
+      close(1);
+      /*
+      dup: faz com que p[1] receba os atributos do menor descritor de arquivo disponível,
+            1, a saída padrão, e seus acessos
+           daí, o que for escrito na saída padrão será escrito em p[1]
+      */
+      dup(p[1]);
+      /*
+      close: libera os descritores de arquivo que não serão utilizados
+      */
+      close(p[0]);
+      close(p[1]);
+      /*
+      runcmd: executa, recursivamente, o comando à esquerda do pipe
+                como runcmd não retorna, este processo não executará o código abaixo
+      */
+      runcmd(pcmd->left);
+    }
+
+    /*
+    fork: cria um processo filho
+          retorna 0 para o processo filho
+          retorna o PID do processo filho para o processo pai
+    */
+    if (fork() == 0) {
+      /*
+      close: cada processo tem sua própria entrada padrão (descritor de arquivo 0)
+             libera o descritor da entrada padrão do processo filho
+      */
+      close(0);
+      /*
+      dup: faz com que p[0] receba os atributos do menor descritor de arquivo disponível,
+            0, a entrada padrão, e seus acessos
+           daí, o que for lido na entrada padrão será lido de p[0]
+      */
+      dup(p[0]);
+      /*
+      close: libera os descritores de arquivo que não serão utilizados
+      */
+      close(p[1]);
+      close(p[0]);
+      /*
+      runcmd: executa, recursivamente, o comando à direita do pipe
+                como runcmd não retorna, este processo não executará o código abaixo
+      */
+      runcmd(pcmd->right); 
+    }
+
+    /*
+    close: libera os descritores de arquivo, que não são utilizados pelo processo pai
+    */
+    close(p[0]);
+    close(p[1]);
+
+    /*
+    wait: aguarda a conclusão dos processos filhos
+    */
+    wait(NULL);
+    wait(NULL);
+    
     /* MARK END task4 */
     break;
   }    
@@ -127,10 +262,18 @@ main(void)
     /* TAREFA1: O que faz o if abaixo e por que ele é necessário?
      * Insira sua resposta no código e modifique o fprintf abaixo
      * para reportar o erro corretamente. */
+    /* RESPOSTA: O if abaixo verifica se o comando é um comando de mudança de diretório.
+     * Se for, ele muda o diretório de trabalho do shell para o diretório especificado.
+     * É necessário verificar o comando 'cd' antes de avaliar os demais comandos porque
+     * 'cd' é um comando interno do shell que altera o diretório de trabalho do processo
+     * atual. Se não tratarmos 'cd' de forma especial, ele seria passado para a função
+     * fork1() e runcmd(), que tentariam executá-lo como um comando externo, o que não
+     * funcionaria corretamente.
+    */
     if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
       buf[strlen(buf)-1] = 0;
       if(chdir(buf+3) < 0)
-        fprintf(stderr, "reporte erro\n");
+        fprintf(stderr, "não pode mudar para %s\n", buf+3);
       continue;
     }
     /* MARK END task1 */

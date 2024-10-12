@@ -12,9 +12,9 @@ MARK_NAME = 'MARK NAME'
 def main():
 	printing = False
 	w = sys.stdout.write
-	regexp1 = re.compile('%s (\w*)' % MARK_START)
-	regexp2 = re.compile('%s (\w*)' % MARK_END)
-	regexp3 = re.compile('%s (\w*)' % MARK_NAME)
+	regexp1 = re.compile(r'%s (\w*)' % MARK_START)
+	regexp2 = re.compile(r'%s (\w*)' % MARK_END)
+	regexp3 = re.compile(r'%s (\w*)' % MARK_NAME)
 
 	for line in sys.stdin:
 		match = regexp3.search(line)
