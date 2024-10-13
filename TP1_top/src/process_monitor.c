@@ -179,7 +179,11 @@ int get_process_name_without_path(const pid_t pid, char *name, const size_t size
     *last_slash = '/';
 
     if (second_to_last_slash != NULL) {
+      #if (false)
       strcpy(name, second_to_last_slash + 1);
+      #else
+      strcpy(name, last_slash + 1);
+      #endif
     }
   }
 

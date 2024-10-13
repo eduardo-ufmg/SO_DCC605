@@ -44,10 +44,10 @@ int setup_terminal_for_input_and_output()
   /*
   the new settings is a copy of the old settings with the following changes:
   - ICANON: disable canonical mode (input is available line by line)
-  - ECHO: enable echo (input is displayed on the terminal)
+  - ECHO: disable echo (input is not displayed on the terminal)
   */
   newt.c_lflag &= ~ICANON;
-  newt.c_lflag |= ECHO;
+  newt.c_lflag &= ~ECHO;
   /*
   tcsetattr: function to set the parameters associated with the terminal
              fd: file descriptor associated with the destination of the parameters (stdin)
@@ -69,7 +69,7 @@ void monitor_processes(monitor_processes_args *args)
   }
 
   while (1) {
-    printf("\033[H\033[J");
+    system("clear");
     print_processes(args->n);
 
     new_update = 1;
@@ -102,9 +102,16 @@ void control_signals()
     ch = getchar();
 
     if (ch != '\n') {
-      if (buffer_index < sizeof(buffer) - 1) {
+      #define DELETE_C 127
+
+      if (ch == DELETE_C) {
+        if (buffer_index > 0) {
+          buffer[--buffer_index] = '\0';
+        }
+      } else if (buffer_index < sizeof(buffer) - 1) {
         buffer[buffer_index++] = ch;
         buffer[buffer_index] = '\0';
+        printf("%c", ch);
       } else {
         printf("\nBuffer limit reached. Clearing buffer.\n");
         buffer_index = 0;
@@ -115,9 +122,10 @@ void control_signals()
       
       if (process_input(buffer) == -1) {
         printf("\nInvalid input: %s\n", buffer);
-        buffer_index = 0;
-        buffer[0] = '\0';
       }
+
+      buffer_index = 0;
+      buffer[0] = '\0';
     }
 
     if (new_update) {
