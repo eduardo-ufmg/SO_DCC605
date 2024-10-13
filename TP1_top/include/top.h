@@ -14,13 +14,18 @@
 #include <dirent.h>
 #include <errno.h>
 #include <time.h>
+#include <signal.h>
+#include <pwd.h>
 
 #define MAX_PROCESSES_TO_PRINT 20
 #define PRINT_PROCESSES_TIME 1
 #define MAX_PATH_BUFFER_SIZE 512
 #define MAX_COMMAND_BUFFER_SIZE 512
-#define MAX_PID_BUFFER_SIZE 10
-#define MAX_SIGNAL_BUFFER_SIZE 10
+#define MAX_OWNERNAME_BUFFER_SIZE 64
+#define MAX_STATE_BUFFER_SIZE 16
+#define MAX_NAME_BUFFER_SIZE 256
+#define MAX_PID_BUFFER_SIZE 16
+#define MAX_SIGNAL_BUFFER_SIZE 16
 
 /*
   function to print the first n processes found
@@ -44,11 +49,32 @@ void monitor_processes(const int time_s);
 pid_t str_to_pid(const char *str);
 
 /*
-  function to convert string to signal
+  function to convert string with signal name to signal
   receives: str - string to convert
   returns: signal or -1 if error
 */
-int str_to_signal(const char *str);
+int str_signal_to_signal(const char *str);
+
+/*
+  function to convert string integer to signal
+  receives: str - string to convert
+  returns: signal or -1 if error
+*/
+int str_int_to_signal(const char *str);
+
+/*
+  function to convert string integer to signal string
+  receives: str - string to convert
+  returns: signal string or NULL if error
+*/
+char* str_int_to_str_signal(const char *str);
+
+/*
+  function to convert input to signal
+  receives: input - input to convert
+  returns: signal or -1 if error
+*/
+int input_to_signal(const char *input);
 
 /*
   function to send a signal to a process
@@ -63,7 +89,7 @@ int send_signal(const pid_t pid, const int sig);
   receives: void
   returns: void
 */
-void read_input();
+void control_signals();
 
 /*
   function to check if a path is a directory
@@ -74,13 +100,30 @@ void read_input();
 int is_directory(const char *path, const struct dirent *entry);
 
 /*
-  function to get the username of a process owner
+  function to check if a path is a file
+  receives: path - path to check
+            entry - entry to check
+  returns: 1 if true, 0 if false
+*/
+int is_file(const char *path, const struct dirent *entry);
+
+/*
+  function to get the username of a uid
   receives: uid - user id
             username - buffer to store the username
             size - size of the buffer
   returns: success or failure
 */
-int get_username(const uid_t uid, char *username, const size_t size);
+int get_username_by_uid(const uid_t uid, char *username, const size_t size);
+
+/*
+  function to get the username of a process owner
+  receives: pid - process id
+            ownername - buffer to store the username
+            size - size of the buffer
+  returns: success or failure
+*/
+int get_ownername(const pid_t pid, char *ownername, const size_t size);
 
 /*
   function to get the state of a process
@@ -92,13 +135,13 @@ int get_username(const uid_t uid, char *username, const size_t size);
 int get_process_state(const pid_t pid, char *state, const size_t size);
 
 /*
-  function to get the command name of a process
+  function to get the name of a process
   receives: pid - process id
-            command - buffer to store the command name
+            name - buffer to store the name
             size - size of the buffer
   returns: success or failure
 */
-int get_process_command(const pid_t pid, char *command, const size_t size);
+int get_process_name_without_path(const pid_t pid, char *name, const size_t size);
 
 /*
   function to print the header of the process table
