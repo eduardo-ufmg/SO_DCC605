@@ -2,25 +2,18 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <signal.h>
 #include <pthread.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <sys/syscall.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <errno.h>
-#include <time.h>
-#include <signal.h>
+
+#define MAX_PROCESSES_TO_PRINT 64
+#define PRINT_PROCESSES_TIME 1
 
 int main()
 {
   pthread_t monitor_thread;
   pthread_t control_thread;
+  monitor_processes_args args = {PRINT_PROCESSES_TIME, MAX_PROCESSES_TO_PRINT};
 
-  if (pthread_create(&monitor_thread, NULL, (void *)monitor_processes, (void *)PRINT_PROCESSES_TIME) != 0) {
+  if (pthread_create(&monitor_thread, NULL, (void *)monitor_processes, &args) != 0) {
     perror("pthread_create");
     return -1;
   }

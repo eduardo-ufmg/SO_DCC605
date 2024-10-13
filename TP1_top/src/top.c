@@ -1,5 +1,8 @@
 #include "top.h"
 
+#include "process_monitor.h"
+#include "signal_control.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,316 +18,145 @@
 #include <time.h>
 #include <signal.h>
 #include <pwd.h>
+#include <termios.h>
+#include <stdatomic.h>
 
-int print_processes(const int n)
+#include "str_to_pid.h"
+
+atomic_int new_update = 0;
+int terminal_is_configured = 0;
+
+int setup_terminal_for_input_and_output()
 {
-  DIR *dir;
-  struct dirent *entry;
-  char username[MAX_PATH_BUFFER_SIZE];
-  char state[MAX_PATH_BUFFER_SIZE];
-  char command[MAX_COMMAND_BUFFER_SIZE];
-  pid_t pid;
-  int count = 0;
+  /*
+  termios: structure that contains the terminal settings
+           c_lflag: local modes
+  */
+  struct termios oldt, newt;
+  /*
+  tcgetattr: function to get the parameters associated with the terminal
+             fd: file descriptor associated with the source of the parameters (stdin)
+             termios_p: pointer to the structure that will receive the parameters
+  */
+  tcgetattr(STDIN_FILENO, &oldt);
+  // copy the parameters to the new structure
+  newt = oldt;
+  /*
+  the new settings is a copy of the old settings with the following changes:
+  - ICANON: disable canonical mode (input is available line by line)
+  - ECHO: enable echo (input is displayed on the terminal)
+  */
+  newt.c_lflag &= ~ICANON;
+  newt.c_lflag |= ECHO;
+  /*
+  tcsetattr: function to set the parameters associated with the terminal
+             fd: file descriptor associated with the destination of the parameters (stdin)
+             optional_actions: TCSANOW - changes are made immediately
+             newt: structure with the new parameters
+  */
+  tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
-  if ((dir = opendir("/proc")) == NULL) {
-    perror("opendir");
-    return -1;
-  }
+  terminal_is_configured = 1;
 
-  print_header();
-
-  while ((entry = readdir(dir)) != NULL) {
-    if (is_directory("/proc", entry)) {
-      pid = str_to_pid(entry->d_name);
-
-      if (pid != -1) {
-        if (get_ownername(pid, username, MAX_PATH_BUFFER_SIZE) == -1) {
-          continue;
-        }
-        if (get_process_state(pid, state, MAX_PATH_BUFFER_SIZE) == -1) {
-          continue;
-        }
-        if (get_process_name_without_path(pid, command, MAX_NAME_BUFFER_SIZE) == -1) {
-          continue;
-        }
-        print_process_info(pid, username, command, state);
-        count++;
-      }
-    }
-
-    if (count == n) {
-      break;
-    }
-  }
-
-  closedir(dir);
   return 0;
 }
 
-void monitor_processes(const int time_s)
+void monitor_processes(monitor_processes_args *args)
 {
+  if (!terminal_is_configured)
+  {
+    setup_terminal_for_input_and_output();
+  }
+
   while (1) {
-    system("clear");
-    print_processes(MAX_PROCESSES_TO_PRINT);
-    sleep(time_s);
+    printf("\033[H\033[J");
+    print_processes(args->n);
+
+    new_update = 1;
+
+    sleep(args->time_s);
   }
 }
 
-pid_t str_to_pid(const char *str)
+/*
+  function to read input asynchronously, while the output
+  is constantly updated
+  it reads the input character by character, appending it to a buffer
+  the buffer is processed when the user presses enter
+  and kept between updates, so the user can continue typing
+  also, input is echoed to stdout and the buffer is also appended to stdout
+  when a new update occurs
+*/
+void control_signals()
 {
-  char *endptr;
+  char buffer[MAX_INPUT_BUFFER_SIZE];
+  size_t buffer_index = 0;
+  char ch;
 
-  pid_t pid = strtol(str, &endptr, 10);
+  if (!terminal_is_configured)
+  {
+    setup_terminal_for_input_and_output();
+  }
 
-  if (endptr == str || *endptr != '\0') {
+  while (1) {
+    ch = getchar();
+
+    if (ch != '\n') {
+      if (buffer_index < sizeof(buffer) - 1) {
+        buffer[buffer_index++] = ch;
+        buffer[buffer_index] = '\0';
+      } else {
+        printf("\nBuffer limit reached. Clearing buffer.\n");
+        buffer_index = 0;
+        buffer[0] = '\0';
+      }
+    } else {
+      buffer[buffer_index] = '\0';
+      
+      if (process_input(buffer) == -1) {
+        printf("\nInvalid input: %s\n", buffer);
+        buffer_index = 0;
+        buffer[0] = '\0';
+      }
+    }
+
+    if (new_update) {
+      printf("\n> %s", buffer);
+      new_update = 0;
+    }
+  }
+}
+
+int process_input(char *buffer)
+{
+  char *token = strtok(buffer, " ");
+  if (token == NULL) {
     return -1;
   }
 
-  return pid;
-}
-
-int str_signal_to_signal(const char *str)
-{
-  if (strcmp(str, "SIGKILL") == 0) {
-    return SIGKILL;
-  } else if (strcmp(str, "SIGSTOP") == 0) {
-    return SIGSTOP;
-  } else if (strcmp(str, "SIGCONT") == 0) {
-    return SIGCONT;
-  } else if (strcmp(str, "SIGTERM") == 0) {
-    return SIGTERM;
-  } else if (strcmp(str, "SIGUSR1") == 0) {
-    return SIGUSR1;
-  } else if (strcmp(str, "SIGUSR2") == 0) {
-    return SIGUSR2;
-  } else {
-    return -1;
-  }
-}
-
-int str_int_to_signal(const char *str)
-{
-  char *endptr;
-
-  int sig = strtol(str, &endptr, 10);
-
-  if (endptr == str || *endptr != '\0') {
+  pid_t pid = str_to_pid(token);
+  
+  if (pid == -1) {
+    printf("Invalid PID: %s\n", token);
     return -1;
   }
 
-  return sig;
-}
-
-char* str_int_to_str_signal(const char *str)
-{
-
-  int sig = str_int_to_signal(str);
-
-  if (sig == -1) {
-    return NULL;
+  token = strtok(NULL, " ");
+  if (token == NULL) {
+    return -1;
   }
 
-  switch (sig) {
-    case SIGKILL:
-      return "SIGKILL";
-    case SIGSTOP:
-      return "SIGSTOP";
-    case SIGCONT:
-      return "SIGCONT";
-    case SIGTERM:
-      return "SIGTERM";
-    case SIGUSR1:
-      return "SIGUSR1";
-    case SIGUSR2:
-      return "SIGUSR2";
-    default:
-      return NULL;
-  }
-}
+  int signal = input_to_signal(token);
 
-int send_signal(const pid_t pid, const int sig)
-{
-  if (kill(pid, sig) == -1) {
+  if (signal == -1) {
+    printf("Invalid signal: %s\n", token);
+    return -1;
+  }
+
+  if (kill(pid, signal) == -1) {
     perror("kill");
     return -1;
   }
 
   return 0;
-}
-
-void control_signals()
-{
-  char input[MAX_PATH_BUFFER_SIZE];
-  char *token;
-  pid_t pid;
-  int sig;
-
-  while (1) {
-    fgets(input, MAX_PATH_BUFFER_SIZE, stdin);
-    token = strtok(input, " ");
-
-    if (token == NULL) {
-      continue;
-    }
-
-    pid = str_to_pid(token);
-    if (pid == -1) {
-      continue;
-    }
-
-    token = strtok(NULL, " ");
-    if (token == NULL) {
-      continue;
-    }
-
-    sig = input_to_signal(token);
-    if (sig == -1) {
-      continue;
-    }
-
-    send_signal(pid, sig);
-  }
-}
-
-int input_to_signal(const char *input)
-{
-  int sig;
-
-  sig = str_signal_to_signal(input);
-  if (sig == -1) {
-    sig = str_int_to_signal(input);
-  }
-
-  return sig;
-}
-
-int is_directory(const char *path, const struct dirent *entry)
-{
-  struct stat statbuf;
-  char fullpath[MAX_PATH_BUFFER_SIZE];
-
-  snprintf(fullpath, MAX_PATH_BUFFER_SIZE, "%s/%s", path, entry->d_name);
-
-  if (stat(fullpath, &statbuf) == -1) {
-    perror("stat");
-    return 0;
-  }
-
-  return S_ISDIR(statbuf.st_mode);
-}
-
-int is_file(const char *path, const struct dirent *entry)
-{
-  struct stat statbuf;
-  char fullpath[MAX_PATH_BUFFER_SIZE];
-
-  snprintf(fullpath, MAX_PATH_BUFFER_SIZE, "%s/%s", path, entry->d_name);
-
-  if (stat(fullpath, &statbuf) == -1) {
-    perror("stat");
-    return 0;
-  }
-
-  return S_ISREG(statbuf.st_mode);
-}
-
-int get_username_by_uid(const uid_t uid, char *username, const size_t size)
-{
-  struct passwd *pwd;
-
-  if ((pwd = getpwuid(uid)) == NULL) {
-    perror("getpwuid");
-    return -1;
-  }
-
-  strncpy(username, pwd->pw_name, size);
-  return 0;
-}
-
-int get_ownername(const pid_t pid, char *ownername, const size_t size)
-{
-  char path[MAX_PATH_BUFFER_SIZE];
-  FILE *file;
-
-  snprintf(path, MAX_PATH_BUFFER_SIZE, "/proc/%d/status", pid);
-
-  if ((file = fopen(path, "r")) == NULL) {
-    perror("fopen");
-    return -1;
-  }
-
-  while (fgets(path, MAX_PATH_BUFFER_SIZE, file) != NULL) {
-    if (strncmp(path, "Uid:", 4) == 0) {
-      fclose(file);
-      return get_username_by_uid(atoi(path + 5), ownername, size);
-    }
-  }
-
-  fclose(file);
-  return -1;
-}
-
-int get_process_state(const pid_t pid, char *state, const size_t size)
-{
-  char path[MAX_PATH_BUFFER_SIZE];
-  FILE *file;
-
-  snprintf(path, MAX_PATH_BUFFER_SIZE, "/proc/%d/status", pid);
-
-  if ((file = fopen(path, "r")) == NULL) {
-    perror("fopen");
-    return -1;
-  }
-
-  while (fgets(path, MAX_PATH_BUFFER_SIZE, file) != NULL) {
-    if (strncmp(path, "State:", 6) == 0) {
-      strncpy(state, path + 7, size);
-      fclose(file);
-      return 0;
-    }
-  }
-
-  fclose(file);
-  return -1;
-}
-
-int get_process_name_without_path(const pid_t pid, char *name, const size_t size)
-{
-  char path[MAX_PATH_BUFFER_SIZE];
-  FILE *file;
-
-  snprintf(path, MAX_PATH_BUFFER_SIZE, "/proc/%d/cmdline", pid);
-
-  if ((file = fopen(path, "r")) == NULL) {
-    perror("fopen");
-    return -1;
-  }
-
-  if (fgets(name, size, file) == NULL) {
-    fclose(file);
-    return -1;
-  }
-
-  fclose(file);
-
-  char *last_slash = strrchr(name, '/');
-  if (last_slash != NULL) {
-    char *first_space = strchr(last_slash + 1, ' ');
-    if (first_space != NULL) {
-      *first_space = '\0';
-    }
-    memmove(name, last_slash + 1, strlen(last_slash));
-  }
-
-  return 0;
-}
-
-void print_header()
-{
-  printf("%-10s %-20s %-20s %-20s\n", "PID", "OWNER", "NAME", "STATE");
-}
-
-void print_process_info(const pid_t pid, const char *username, const char *command, const char *state)
-{
-  printf("%-10d %-20s %-20s %-20s\n", pid, username, command, state);
 }
