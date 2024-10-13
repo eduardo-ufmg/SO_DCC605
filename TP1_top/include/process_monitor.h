@@ -24,6 +24,11 @@
 #define MAX_OWNERNAME_BUFFER_SIZE 64
 #define MAX_STATE_BUFFER_SIZE 64
 
+/*
+  monitor_processes_args: structure to pass arguments to the monitor_processes thread
+  time_s: time in seconds to wait between updates
+  n: number of processes to print
+*/
 typedef struct {
   int time_s;
   int n;

@@ -38,7 +38,6 @@ int setup_terminal_for_input_and_output();
   receives: args - arguments to pass to print_processes
                     time_s - time to wait between prints
                     n - number of processes to print
-            [new_update] - global variable to check if the process list has been updated
   returns: void
 */
 void monitor_processes(monitor_processes_args *args);

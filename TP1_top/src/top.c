@@ -23,9 +23,19 @@
 
 #include "str_to_pid.h"
 
+/*
+  new_update: global atomic variable shared between
+              monitor_processes and control_signals
+              to keep track of the last update
+*/
 atomic_int new_update = 0;
 int terminal_is_configured = 0;
 
+/*
+  function to setup terminal so that input is preserved between output clears
+  receives: void
+  returns: void
+*/
 int setup_terminal_for_input_and_output()
 {
   /*
@@ -61,6 +71,13 @@ int setup_terminal_for_input_and_output()
   return 0;
 }
 
+/*
+  function to call print_processes each time_s seconds (a thread)
+  receives: args - arguments to pass to print_processes
+                    time_s - time to wait between prints
+                    n - number of processes to print
+  returns: void
+*/
 void monitor_processes(monitor_processes_args *args)
 {
   if (!terminal_is_configured)
@@ -99,16 +116,29 @@ void control_signals()
   }
 
   while (1) {
+    /*
+      since the terminal is in non-canonical mode,
+      getchar reads any character as soon as it's typed
+      even if a new line is not received
+    */
     ch = getchar();
 
     if (ch != '\n') {
       #define DELETE_C 127
 
+      /*
+        if the character is a backspace, remove the last character from the buffer
+        if the buffer is not empty
+      */
       if (ch == DELETE_C) {
         if (buffer_index > 0) {
           buffer[--buffer_index] = '\0';
         }
       } else if (buffer_index < sizeof(buffer) - 1) {
+        /*
+          if the buffer is not full, append the character to the buffer,
+          add a null terminator and echo the character to stdout
+        */
         buffer[buffer_index++] = ch;
         buffer[buffer_index] = '\0';
         printf("%c", ch);
@@ -128,6 +158,10 @@ void control_signals()
       buffer[0] = '\0';
     }
 
+    /*
+      if a new update occurred, print the buffer
+      and reset the flag
+    */
     if (new_update) {
       printf("\n> %s", buffer);
       new_update = 0;
@@ -135,8 +169,19 @@ void control_signals()
   }
 }
 
+/*
+  function to process the input buffer
+  receives: buffer - buffer to process
+  returns: success or failure
+*/
 int process_input(char *buffer)
 {
+  /*
+    strtok: function to split a string into tokens
+            buffer: string to split
+            " ": delimiter
+            returns a pointer to the first token
+  */
   char *token = strtok(buffer, " ");
   if (token == NULL) {
     return -1;
@@ -149,6 +194,12 @@ int process_input(char *buffer)
     return -1;
   }
 
+  /*
+    strtok: function to split a string into tokens
+            NULL: continue from the last token
+            " ": delimiter
+            returns a pointer to the next token
+  */
   token = strtok(NULL, " ");
   if (token == NULL) {
     return -1;
@@ -161,6 +212,12 @@ int process_input(char *buffer)
     return -1;
   }
 
+  /*
+    kill: function to send a signal to a process
+          pid: process ID
+          signal: signal to send
+          returns 0 on success, -1 on failure
+  */
   if (kill(pid, signal) == -1) {
     perror("kill");
     return -1;
