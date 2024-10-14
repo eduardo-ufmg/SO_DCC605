@@ -24,12 +24,12 @@
 #include "str_to_pid.h"
 
 /*
-  new_update: global atomic variable shared between
-              monitor_processes and control_signals
-              to keep track of the last update
+  buffer to store the input
+  shared between the input thread and the output thread
+  so that it's echoed to stdout when the output is updated
 */
-atomic_int new_update = 0;
-int terminal_is_configured = 0;
+atomic_char input_buffer[MAX_INPUT_BUFFER_SIZE];
+atomic_int terminal_is_configured = 0;
 
 /*
   function to setup terminal so that input is preserved between output clears
@@ -76,6 +76,7 @@ int setup_terminal_for_input_and_output()
   receives: args - arguments to pass to print_processes
                     time_s - time to wait between prints
                     n - number of processes to print
+  access: input_buffer (shared, read)
   returns: void
 */
 void monitor_processes(monitor_processes_args *args)
@@ -88,8 +89,8 @@ void monitor_processes(monitor_processes_args *args)
   while (1) {
     system("clear");
     print_processes(args->n);
-
-    new_update = 1;
+    printf("> %s", input_buffer);
+    fflush(stdout);
 
     sleep(args->time_s);
   }
@@ -103,10 +104,10 @@ void monitor_processes(monitor_processes_args *args)
   and kept between updates, so the user can continue typing
   also, input is echoed to stdout and the buffer is also appended to stdout
   when a new update occurs
+  access: input_buffer (shared, write)
 */
 void control_signals()
 {
-  char buffer[MAX_INPUT_BUFFER_SIZE];
   size_t buffer_index = 0;
   char ch;
 
@@ -132,50 +133,47 @@ void control_signals()
       */
       if (ch == DELETE_C) {
         if (buffer_index > 0) {
-          buffer[--buffer_index] = '\0';
+          input_buffer[--buffer_index] = '\0';
         }
-      } else if (buffer_index < sizeof(buffer) - 1) {
+      } else if (buffer_index < sizeof(input_buffer) - 1) {
         /*
           if the buffer is not full, append the character to the buffer,
           add a null terminator and echo the character to stdout
         */
-        buffer[buffer_index++] = ch;
-        buffer[buffer_index] = '\0';
+        input_buffer[buffer_index++] = ch;
+        input_buffer[buffer_index] = '\0';
         printf("%c", ch);
       } else {
         printf("\nBuffer limit reached. Clearing buffer.\n");
         buffer_index = 0;
-        buffer[0] = '\0';
+        input_buffer[0] = '\0';
       }
     } else {
-      buffer[buffer_index] = '\0';
+      input_buffer[buffer_index] = '\0';
       
-      if (process_input(buffer) == -1) {
-        printf("\nInvalid input: %s\n", buffer);
+      if (process_input() == -1) {
+        printf("\nInvalid input: %s\n", input_buffer);
       }
 
       buffer_index = 0;
-      buffer[0] = '\0';
-    }
-
-    /*
-      if a new update occurred, print the buffer
-      and reset the flag
-    */
-    if (new_update) {
-      printf("\n> %s", buffer);
-      new_update = 0;
+      input_buffer[0] = '\0';
     }
   }
 }
 
 /*
   function to process the input buffer
-  receives: buffer - buffer to process
+  access: input_buffer (shared, read and write)
   returns: success or failure
 */
-int process_input(char *buffer)
+int process_input()
 {
+  char buffer[MAX_INPUT_BUFFER_SIZE];
+
+  for (size_t i = 0; input_buffer[i] != '\0'; i++) {
+    buffer[i] = atomic_load(&input_buffer[i]);
+  }
+
   /*
     strtok: function to split a string into tokens
             buffer: string to split

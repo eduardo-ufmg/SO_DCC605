@@ -38,6 +38,7 @@ int setup_terminal_for_input_and_output();
   receives: args - arguments to pass to print_processes
                     time_s - time to wait between prints
                     n - number of processes to print
+  access: input_buffer (shared, read)
   returns: void
 */
 void monitor_processes(monitor_processes_args *args);
@@ -45,6 +46,7 @@ void monitor_processes(monitor_processes_args *args);
 /*
   function to read input, convert it and send signal (a thread)
   receives: void
+  access: input_buffer (shared, write)
   returns: void
 */
 void control_signals();
@@ -52,8 +54,9 @@ void control_signals();
 /*
   function to process the input buffer
   receives: buffer - buffer to process
+  access: input_buffer (shared, read and write)
   returns: success or failure
 */
-int process_input(char *buffer);
+int process_input();
 
 #endif // TOP_H
