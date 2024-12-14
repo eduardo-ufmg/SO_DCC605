@@ -1,3 +1,6 @@
 [submodule "TP2/xv6-public"]
 	path = TP2/xv6-public
 	url = https://github.com/eduardo-ufmg/xv6-public.git
+[submodule "TP2/xv6-riscv"]
+	path = TP2/xv6-riscv
+	url = https://github.com/eduardo-ufmg/xv6-riscv.git
