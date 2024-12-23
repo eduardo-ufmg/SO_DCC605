@@ -221,7 +221,9 @@ fork(void)
   return pid;
 }
 
-int forkcow(void) {
+int
+forkcow(void)
+{
   int i, pid;
   struct proc *np;
   struct proc *curproc = myproc();
@@ -577,7 +579,9 @@ procdump(void)
   }
 }
 
-int numpages(void) {
+int
+numpages(void)
+{
   struct proc *p = myproc();
   int count = 0;
   for (int i = 0; i < NPDENTRIES; i++) {

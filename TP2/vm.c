@@ -418,23 +418,27 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
   return 0;
 }
 
-char* virt2real(char *va) {
+char*
+virt2real(char *va)
+{
   struct proc *p = myproc();
   return uva2ka(p->pgdir, va);
 }
 
-void handle_cow_fault(uint va) {
+void
+handlecowfault(uint va)
+{
   pte_t *pte;
   uint pa;
   char *mem;
 
   pte = walkpgdir(myproc()->pgdir, (void*)va, 0);
   if(!pte || !(*pte & PTE_P) || !(*pte & PTE_COW))
-    panic("handle_cow_fault: not a COW page");
+    panic("handlecowfault: not a COW page");
 
   pa = PTE_ADDR(*pte);
   if((mem = kalloc()) == 0)
-    panic("handle_cow_fault: kalloc failed");
+    panic("handlecowfault: kalloc failed");
   memmove(mem, (char*)P2V(pa), PGSIZE);
   *pte = V2P(mem) | PTE_P | PTE_W | PTE_U;
   lcr3(V2P(myproc()->pgdir));  // flush TLB

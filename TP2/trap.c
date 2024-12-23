@@ -50,7 +50,7 @@ trap(struct trapframe *tf)
     uint va = rcr2();
     if((tf->err & 0x2) && (va < KERNBASE)){
       // Handle copy-on-write
-      handle_cow_fault(va);
+      handlecowfault(va);
       return;
     }
   }

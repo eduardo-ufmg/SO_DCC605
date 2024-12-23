@@ -1,51 +1,202 @@
-NOTE: we have stopped maintaining the x86 version of xv6, and switched
-our efforts to the RISC-V version
-(https://github.com/mit-pdos/xv6-riscv.git)
+# Disclaimer
+`num_pages` was changed to `nunmpages` in order to comply with xv6's function naming convention.
 
-xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
-Version 6 (v6).  xv6 loosely follows the structure and style of v6,
-but is implemented for a modern x86-based multiprocessor using ANSI C.
+## virt2real
+**definition**
+```c
+char*
+virt2real(char *va)
+{
+  struct proc *p = myproc();
+  return uva2ka(p->pgdir, va);
+}
+```
 
-ACKNOWLEDGMENTS
+**description**
+`myproc` returns the process that is currently running. `uva2ka` takes its page directory and a virtual address and returns the corresponding kernel address.
 
-xv6 is inspired by John Lions's Commentary on UNIX 6th Edition (Peer
-to Peer Communications; ISBN: 1-57398-013-7; 1st edition (June 14,
-2000)). See also https://pdos.csail.mit.edu/6.828/, which
-provides pointers to on-line resources for v6.
+**syscall**
+```c
+int
+sys_virt2real(void)
+{
+  char *va;
+  argptr(0, &va, sizeof(char*));
+  return (int) virt2real(va);
+}
+```
 
-xv6 borrows code from the following sources:
-    JOS (asm.h, elf.h, mmu.h, bootasm.S, ide.c, console.c, and others)
-    Plan 9 (entryother.S, mp.h, mp.c, lapic.c)
-    FreeBSD (ioapic.c)
-    NetBSD (console.c)
+## numpages
+**definition**
+```c
+int
+numpages(void)
+{
+  struct proc *p = myproc();
+  int count = 0;
+  for (int i = 0; i < NPDENTRIES; i++) {
+    if (p->pgdir[i] & PTE_P) {
+      count++;
+    }
+  }
+  return count;
+}
+```
 
-The following people have made contributions: Russ Cox (context switching,
-locking), Cliff Frey (MP), Xiao Yu (MP), Nickolai Zeldovich, and Austin
-Clements.
+**description**
+`myproc` returns the process that is currently running. `NPDENTRIES` is the number of page directory entries. `PTE_P` is a flag that indicates that the page is present in memory.
 
-We are also grateful for the bug reports and patches contributed by Silas
-Boyd-Wickizer, Anton Burtsev, Cody Cutler, Mike CAT, Tej Chajed, eyalz800,
-Nelson Elhage, Saar Ettinger, Alice Ferrazzi, Nathaniel Filardo, Peter
-Froehlich, Yakir Goaron,Shivam Handa, Bryan Henry, Jim Huang, Alexander
-Kapshuk, Anders Kaseorg, kehao95, Wolfgang Keller, Eddie Kohler, Austin
-Liew, Imbar Marinescu, Yandong Mao, Matan Shabtay, Hitoshi Mitake, Carmi
-Merimovich, Mark Morrissey, mtasm, Joel Nider, Greg Price, Ayan Shafqat,
-Eldar Sehayek, Yongming Shen, Cam Tenny, tyfkda, Rafael Ubal, Warren
-Toomey, Stephen Tu, Pablo Ventura, Xi Wang, Keiichi Watanabe, Nicolas
-Wolovick, wxdao, Grant Wu, Jindong Zhang, Icenowy Zheng, and Zou Chang Wei.
+**syscall**
+```c
+int
+sys_numpages(void)
+{
+  return numpages();
+}
+```
 
-The code in the files that constitute xv6 is
-Copyright 2006-2018 Frans Kaashoek, Robert Morris, and Russ Cox.
+## forkcow
+**definition**
+```c
+int
+forkcow(void)
+{
+  int i, pid;
+  struct proc *np;
+  struct proc *curproc = myproc();
 
-ERROR REPORTS
+  // Allocate process.
+  if((np = allocproc()) == 0){
+    return -1;
+  }
 
-We don't process error reports (see note on top of this file).
+  // Copy process state from p.
+  if((np->pgdir = copyuvmcow(curproc->pgdir, curproc->sz)) == 0){
+    kfree(np->kstack);
+    np->kstack = 0;
+    np->state = UNUSED;
+    return -1;
+  }
+  np->sz = curproc->sz;
+  np->parent = curproc;
+  *np->tf = *curproc->tf;
 
-BUILDING AND RUNNING XV6
+  // Clear %eax so that fork returns 0 in the child.
+  np->tf->eax = 0;
 
-To build xv6 on an x86 ELF machine (like Linux or FreeBSD), run
-"make". On non-x86 or non-ELF machines (like OS X, even on x86), you
-will need to install a cross-compiler gcc suite capable of producing
-x86 ELF binaries (see https://pdos.csail.mit.edu/6.828/).
-Then run "make TOOLPREFIX=i386-jos-elf-". Now install the QEMU PC
-simulator and run "make qemu".
+  for(i = 0; i < NOFILE; i++){
+    if(curproc->ofile[i]){
+      np->ofile[i] = filedup(curproc->ofile[i]);
+    }
+  }
+  np->cwd = idup(curproc->cwd);
+
+  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+
+  pid = np->pid;
+
+  acquire(&ptable.lock);
+
+  np->state = RUNNABLE;
+
+  release(&ptable.lock);
+
+  return pid;
+}
+```
+
+**description**
+same as `fork`, but `copyuvmcow` does a copy-on-write of the parent's page table.
+
+**syscall**
+```c
+int
+sys_forkcow(void)
+{
+  return forkcow();
+}
+```
+
+### copyuvmcow
+**definition**
+```c
+pde_t*
+copyuvmcow(pde_t *pgdir, uint sz)
+{
+  pde_t *d;
+  pte_t *pte;
+  uint pa, i, flags;
+
+  if((d = setupkvm()) == 0)
+    return 0;
+  for(i = 0; i < sz; i += PGSIZE){
+    if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
+      panic("copyuvmcow: pte should exist");
+    if(!(*pte & PTE_P))
+      panic("copyuvmcow: page not present");
+    pa = PTE_ADDR(*pte);
+    flags = PTE_FLAGS(*pte);
+    flags &= ~PTE_W;
+    flags |= PTE_COW;
+    *pte = pa | flags;
+    int frame = pa / PGSIZE;
+    ref_count[frame]++;
+    if(mappages(d, (void*)i, PGSIZE, pa, flags) < 0)
+      goto bad;
+  }
+  lcr3(V2P(pgdir));  // flush TLB
+  return d;
+
+bad:
+  freevm(d);
+  return 0;
+}
+```
+
+**description**
+`setupkvm` allocates a new page directory in the kernel. the `for` loop iterates over the parent's virtual address space. since `i` starts as `0` and is incremented by `PGSIZE`, each iteration corresponds to the first address of a page. `walkpgdir` returns the page table entry for the given virtual address. `PTE_P` is a flag that indicates that the page is present in memory. `PTE_ADDR` extracts the physical address from the page table entry. `PTE_FLAGS` extracts the flags from the page table entry. `flags` are set to set the page as copy-on-write. `*pte = pa | flags` updates the page table entry's flags. `ref_count[frame]++` increments the reference count of the frame. `mappages` maps the page to the child's page table directory. `lcr3` flushes the TLB.
+
+### trap handling
+```c
+  if(tf->trapno == T_PGFLT){
+    uint va = rcr2();
+    if((tf->err & 0x2) && (va < KERNBASE)){
+      // Handle copy-on-write
+      handlecowfault(va);
+      return;
+    }
+  }
+```
+
+**explanation**
+when a trap occurs, `rcr2` returns the virtual address that caused the trap. if the trap is a page fault and the faulting address is less than `KERNBASE`, then it is a copy-on-write fault. `handlecowfault` is called to handle the fault.
+
+### handlecowfault
+**definition**
+```c
+void
+handlecowfault(uint va)
+{
+  pte_t *pte;
+  uint pa;
+  char *mem;
+
+  pte = walkpgdir(myproc()->pgdir, (void*)va, 0);
+  if(!pte || !(*pte & PTE_P) || !(*pte & PTE_COW))
+    panic("handlecowfault: not a COW page");
+
+  pa = PTE_ADDR(*pte);
+  if((mem = kalloc()) == 0)
+    panic("handlecowfault: kalloc failed");
+  memmove(mem, (char*)P2V(pa), PGSIZE);
+  *pte = V2P(mem) | PTE_P | PTE_W | PTE_U;
+  lcr3(V2P(myproc()->pgdir));  // flush TLB
+}
+```
+
+**description**
+`walkpgdir` returns the page table entry for the given virtual address. `PTE_P` is a flag that indicates that the page is present in memory. `PTE_COW` is a flag that indicates that the page is copy-on-write. `PTE_ADDR` extracts the physical address from the page table entry. `kalloc` allocates a new page in the kernel. `memmove` copies the contents of the parent's page to the child's page. `*pte = V2P(mem) | PTE_P | PTE_W | PTE_U` updates the page table entry's flags. `lcr3` flushes the TLB.
+
+### kalloc and kfree changes in order to keep track of the reference count
+**kalloc:** `ref_count` is incremented when a page is allocated.
+**kfree:** `ref_count` is decremented when a page is freed. if the reference count is zero, the page is freed.
