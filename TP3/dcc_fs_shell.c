@@ -65,6 +65,7 @@ int main(int argc, char **argv)
     }
   }
 
+  fclose(img_fp);
   return 0;
 }
 
@@ -300,6 +301,11 @@ void find(struct ext2_dir_entry_2 *dir_entry)
 
 void sb()
 {
+  if (read_super_block() != 0) {
+    fprintf(stderr, "Failed to read super block\n");
+    return;
+  }
+
   printf("Inodes count: %d\n", super_block.s_inodes_count);
   printf("Blocks count: %d\n", super_block.s_blocks_count);
   printf("Free inodes count: %d\n", super_block.s_free_inodes_count);
