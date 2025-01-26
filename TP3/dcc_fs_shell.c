@@ -33,7 +33,7 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  img_fp = fopen(argv[1], "r");
+  img_fp = fopen(argv[1], "rb");
 
   if (img_fp == NULL) {
     perror("Failed to open image file");
@@ -136,12 +136,7 @@ int read_dir_entry(struct ext2_inode *inode, struct ext2_dir_entry_2 *dir_entry)
 
 void set_current_dir_entry_to_root()
 {
-  struct ext2_group_desc group_desc;
   struct ext2_inode root_inode;
-
-  if (read_first_group_desc(&group_desc) != 0) {
-    exit(1);
-  }
 
   if (read_inode_on_first_group(EXT2_ROOT_INO, &root_inode) != 0) {
     exit(1);

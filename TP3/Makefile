@@ -1,6 +1,11 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -Werror -pedantic
 TARGET = dcc_fs_shell
+DEBUG ?= 0
+
+ifeq ($(DEBUG), 1)
+	CFLAGS += -DDEBUG
+endif
 
 all: $(TARGET)
 
