@@ -1,19 +1,16 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -Werror -pedantic -Iinclude
-
-SRC = src/main.c src/commands.c src/ext2.c
-OBJ_DIR = obj
-OBJ = $(SRC:src/%.c=$(OBJ_DIR)/%.o)
+CFLAGS = -Wall -Wextra -Werror -pedantic
 TARGET = dcc_fs_shell
 
 all: $(TARGET)
 
-$(OBJ_DIR)/%.o: src/%.c
-	@mkdir -p $(OBJ_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+$(TARGET): dcc_fs_shell.o
+	$(CC) $(CFLAGS) -o $(TARGET) dcc_fs_shell.o -lext2fs
 
-$(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^
+dcc_fs_shell.o: dcc_fs_shell.c
+	$(CC) $(CFLAGS) -c dcc_fs_shell.c
 
 clean:
-	rm -f $(OBJ) $(TARGET)
+	rm -f $(TARGET) dcc_fs_shell.o
+
+.PHONY: all clean
