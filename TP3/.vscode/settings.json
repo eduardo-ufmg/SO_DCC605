@@ -1,7 +1,0 @@
-{
-  "files.associations": {
-    "ext2_fs.h": "c",
-    "ext2_types.h": "c",
-    "stdio.h": "c"
-  }
-}
